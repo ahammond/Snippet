@@ -9,55 +9,35 @@ Copyright (c) 2010 Andrew Hammond. All rights reserved.
 
 Find the most relevant snippet for a document and highlight all query terms that appear in the snippet.
 
-Since I do not know what modules are standard at Yelp, I'm sticking to python 2.5 standard stuff,
-and libraries that happen to be included on my Mac (running osx 10.6.4). I would generally prefer to take
-advantage of a mocking library such as Mock for UTs.
+Since I do not know what modules are standard at Yelp, I'm sticking to python 2.6 standard stuff,
+and libraries that happen to be included on my Mac (running osx 10.6.4).
+I would generally use a mocking library such as Mock for UTs,
+but I figured this had better run on anyone's machine.
 
 Algorithm: 
 I tried my hand at a custom algorithm and wasn't happy with the results,
-so I've impelmented a Smith-Waterman variant.
+so I've impelmented Smith-Waterman.
 http://en.wikipedia.org/wiki/Smith-Waterman_algorithm
 It varies from the standard approach since instead of matching amino acids, I'm matching words.
 Naturally this means that I'm not using a BLOSUM matrix for weighted partial matches 
 but have instead gone with a simple match / don't match approach.
 
-Details of my algorithm (the one that sucks).
-The document is parsed into a dictionary which maps the various tokens to their locations in the document.
-The query is similarly parsed, however we instead generate an in-order list of terms.
-Then, starting at the 0th index of the document, we pass through the query terms and for each term,
-    for each entry in the map that has an index greater than the current term
-
-Finally, we calculate the maximum snippet length and find the subset of the array that is "hottest".
-
-
 Definitions:
-Document - The initial input to be searched.
+Document - The input to be searched.
 
-Query - The initial input to search for.
+Query - The input to search for.
 
-Snippet - A section of a document. A snippet is a string of no more than 
-    __snippetMaxHead__ +
-    __snippetPerTerm__ * number of query terms +
-    length of the query string +
-    __snippetMaxTail__
-
-I've decided to allow the size of the query to drive the maximum size of the snippet.
-There are a number of other approaches that might make sense, for example using sentence boundaries, 
-but I think that those would be things that needed to be A/B tested for user acceptance / preference.
-
-Most Relevant Snippet - The first snippet within the document that contains either all of the query terms in order,
-or the most in query terms as close to each other as possible.
+Snippet - A section of a document. A snippet is a string that looks like the following.
+    __snippetMaxHead__ + local match terms + __snippetMaxTail__
 '''
 
 import re
 import unittest
-
-__snippetMaxHead__ = 20
-__snippetPerTerm__ = 5
-__snippetMaxTail__ = 20
+from collections import deque
 
 # Initially, we won't worry much about normalizing the input. 
-# A future iteration would probably want to do something more clever.
+# TODO: Normalize tokens more intelligently
+# like for example mapping "greasewheel" to pizza, or brewskie to beer.
 __tokenNormalizer__ = lambda x : x.lower()
 
 def highlight_doc(doc, query):
@@ -68,20 +48,32 @@ def highlight_doc(doc, query):
     Returns:
     The the most relevant snippet with the query terms highlighted.
     '''
-    pass
+    return str(Snippet(doc, query))
+
+class Highlight_DocTests(unittest.TestCase):
+    def setUp(self):
+        self.d = 'An example document with some fun and interesting words in it.'
+        self.q = 'document fun and words'
+
+    def testBasic(self):
+        self.assertEqual(
+                highlight_doc(self.d, self.q),
+                '... document with some [[HIGHLIGHT]]fun and[[ENDHIGHLIGHT]] interesting [[HIGHLIGHT]]words[[ENDHIGHLIGHT]] in it.')
 
 
 class Token:
     '''A class to represent tokens and their offset into the string from which they were generated.'''
-    def __init__(self, string, location):
+    def __init__(self, string, location, endLocation):
         self.__string__ = string
         self.__location__ = location
+        self.__endLocation__ = endLocation
 
     def __repr__(self):
-        return 'Token(\'%s\', %d)' % (self.__string__, self.__location__)
+        return 'Token(\'%s\', %d, %d)' % (self.__string__, self.__location__, self.__endLocation__)
 
     def __cmp__(self, other):
-        return cmp((self.__string__, self.__location__), (other.__string__, other.__location__))
+        return cmp((self.__string__, self.__location__, self.__endLocation__),
+                   (other.__string__, other.__location__, other.__endLocation__))
 
     def string(self):
         return self.__string__
@@ -89,14 +81,18 @@ class Token:
     def location(self):
         return self.__location__
 
+    def endLocation(self):
+        return self.__endLocation__
+
 class TokenTests(unittest.TestCase):
     def setUp(self):
         pass
 
     def testBasic(self):
-        t = Token('a string', 24)
+        t = Token('a string', 24, 45)
         self.assertEqual(t.string(), 'a string')
         self.assertEqual(t.location(), 24)
+        self.assertEqual(t.endLocation(), 45)
 
 
 class Tokenized:
@@ -137,12 +133,12 @@ class Tokenized:
 
     def list(self):
         '''Accessor function for a token list.
-        The token list is a simple list of the tokens.
+        The token list is a simple list of Tokens.
         '''
         if '__list__' not in dir(self):
             self.__list__ = []
-            for token in self.__tokenizer__.finditer(self.document):
-                self.__list__.append(Token(__tokenNormalizer__(token.expand('\\1')), token.start(1)))
+            for tokenMatch in self.__tokenizer__.finditer(self.document):
+                self.__list__.append(Token(__tokenNormalizer__(tokenMatch.expand('\\1')), tokenMatch.start(1), tokenMatch.end(1)))
             self.__wordCount__ = len(self.__list__)
         return self.__list__
 
@@ -169,11 +165,11 @@ class TokenizedTests(unittest.TestCase):
 
     def testListBasic(self):
         self.assertEqual(Tokenized('A basic query').list(),
-            [Token('a', 0), Token('basic', 2), Token('query', 8)])
+            [Token('a', 0, 1), Token('basic', 2, 7), Token('query', 8, 13)])
 
     def testListMultipleInstance(self):
         self.assertEqual(Tokenized('A, a and another a!').list(),
-            [Token('a', 0), Token('a', 3), Token('and', 5), Token('another', 9), Token('a', 17)])
+            [Token('a', 0, 1), Token('a', 3, 4), Token('and', 5, 8), Token('another', 9, 16), Token('a', 17, 18)])
 
     def testWordCount(self):
         self.assertEqual(Tokenized('This is a six word sentence.').wordCount(), 6)
@@ -271,7 +267,8 @@ class SmithWatermanMatrix:
         documentOffset = max(map(lambda a: len(a.string()), self.document))    # find the longest term in the document
         queryOffset = max(map(lambda a: len(a.string()), self.query))    + 1    # find longest term in the search
         # If the largest query term is smaller than the len(r", (1,'m')"), default to that length.
-        # TODO: Obviously this won't work very well for weights beyond 9 because it assumes a single digit.
+        # Obviously this won't work very well for weights beyond 9 because it assumes a single digit.
+        # TODO: support arbitrary weights
         if queryOffset < 10:
             queryOffset = 10
         s = ' ' * documentOffset                                         # header string
@@ -284,6 +281,8 @@ class SmithWatermanMatrix:
             d = self.document[i-1].string() if i > 0 else '-'
             s += ' ' * (documentOffset - len(d)) + d + str(self.__matrix__[i]) + " %d\n" % i
         return s
+
+    #TODO: render to html for better readability
 
     def dimensions(self):
         return (self.documentLen, self.queryLen)
@@ -384,6 +383,12 @@ class SmithWatermanMatrixTests(unittest.TestCase):
         
 class Snippet:
     '''A class to support the management and generation of snippets.'''
+
+    __snippetMaxHead__ = 20
+    __snippetMaxTail__ = 20
+    __highlightStart__ = '[[HIGHLIGHT]]'
+    __highlightEnd__   = '[[ENDHIGHLIGHT]]'
+
     def __init__(self, document, query):
         self.document = Tokenized(document)
         self.query = Tokenized(query)
@@ -399,32 +404,88 @@ class Snippet:
             self.__matrix__ = SmithWatermanMatrix(self.document, self.query)
         return self.__matrix__
 
+    def highlightSpans(self):
+        '''Accessor function that constructs a list of tuples that represent the beginning and end of highlight sections.
+        '''
+        if '__highlights__' not in dir(self):
+            self.__highlights__ = []
+            terms = deque(self.matrix().optimalPath())
+            lastTerm = None
+            try:
+                # remember, matrix indexing is +1 from Tokenized list indexing
+                t = terms.popleft() - 1
+                while 1:
+                    self.__highlights__.append([t, t])          # start of a series
+                    t = terms.popleft() - 1
+                    while self.__highlights__[-1][1] + 1 == t:  # advance through the list of terms which are sequential
+                        self.__highlights__[-1][1] = t
+                        t = terms.popleft() - 1
+            except IndexError:
+                pass
+        return self.__highlights__
+
+    def startIndexFromTerm(self, termNumber):
+        '''Given a term in the document.list(), return it's start index
+        '''
+        return self.document.list()[termNumber].location()
+
+    def endIndexFromTerm(self, termNumber):
+        return self.document.list()[termNumber].endLocation()
+
+    def __str__(self):
+        '''Return a highlited snippet.
+        '''
+        spans = deque(self.highlightSpans())
+        d = self.document.document
+        r = ''
+        cursor = 0
+        # TODO: should this instead be breaking on work boundaries?
+        if len(spans) > 0:
+            peekStart, peekEnd = spans.popleft()
+            spans.appendleft((peekStart, peekEnd))
+            cursor = self.startIndexFromTerm(peekStart) - self.__snippetMaxHead__
+            if cursor > 0:
+                r = '...'
+            else:
+                cursor = 0
+        while len(spans):
+            startTerm, endTerm = spans.popleft()
+            start = self.startIndexFromTerm(startTerm)
+            end = self.endIndexFromTerm(endTerm)
+            r += d[cursor:start] + self.__highlightStart__ + d[start:end] + self.__highlightEnd__
+            cursor = end
+        # TODO: like the head, should the tail break on word boundaries instead
+        tailLength = cursor+self.__snippetMaxTail__
+        if tailLength > len(d):
+            r+=d[cursor:]
+        else:
+            r += d[cursor:tailLength] + '...'
+        return r
+
 class SnippetTests(unittest.TestCase):
-    def setUp(self):
-        self.basicDoc = 'A basic document.'
+    def setUp(self):    #      0       1    2    3     4    5  6         7
+        self.s = Snippet('Little star\'s deep dish pizza sure is fantastic.', 'deep dish pizza')
 
-#    def testHeatMapLength(self):
-#        self.assertEqual(len(Snippet(self.basicDoc, 'basic').heatMap()), 3)
+    def testHighlightSpans(self):
+        self.assertEqual(self.s.highlightSpans(), [[2,4]])
 
-#    def testHeatMapBasic(self):
-#        self.assertEqual(Snippet(self.basicDoc, 'basic').heatMap(), [0,1,0])
+    def testHighlightSpansComplex(self):
+        s = Snippet('A big complicated document with some complicated stuff in it.', 'with some stuff')
+        self.assertEqual(s.highlightSpans(), [[4,5],[7,7]])
 
-#    def testHeatMapMultipleInstance(self):
-#        self.assertEqual(Snippet("The the one two cat three the cat.", "the cat").heatMap(),
-#            [1.0, 1.0, 0.0, 0.0, 2.0, 0.0, 1.0, 2.0]
-#        )
+    def testIndexFromTerm(self):
+        self.assertEqual(self.s.startIndexFromTerm(3), 19)
 
-#    def testHeatMapNestedPizza(self):
-#        self.assertEqual(Snippet("I like deep deep deep dish pizza pizza pizza!", "deep dish pizza").heatMap(),
-#            []
-#        )
+    def testStr(self):
+        self.assertEqual(str(self.s), 'Little star\'s [[HIGHLIGHT]]deep dish pizza[[ENDHIGHLIGHT]] sure is fantastic.')
 
-#    def testMatrixInit(self):
-#        m = Snippet('Five word long example doc.', 'Three word query').matrix()
-#        self.assertEqual(len(m), 5 + 1)
-#        self.assertEqual(len(m[0]), 3 + 1)
-#        self.assertEqual(m, [[]])
+    def testStrComplex(self):
+        s = Snippet('A big complicated document with some complicated stuff in it.', 'with some stuff')
+        self.assertEqual(str(s), '...omplicated document [[HIGHLIGHT]]with some[[ENDHIGHLIGHT]] complicated [[HIGHLIGHT]]stuff[[ENDHIGHLIGHT]] in it.')
 
+    def testStrLongTail(self):
+        s = Snippet('A big complicated document with some complicated stuff in it.', 'big')
+        self.assertEqual(str(s), 'A [[HIGHLIGHT]]big[[ENDHIGHLIGHT]] complicated documen...')
 
 if __name__ == '__main__':
     unittest.main()
