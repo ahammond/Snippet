@@ -430,7 +430,12 @@ class Snippet:
         return self.document.list()[termNumber].location()
 
     def endIndexFromTerm(self, termNumber):
+        '''Geven a term in the document.list(), return it's end index
+        '''
         return self.document.list()[termNumber].endLocation()
+
+    def hasMatch(self):
+        return 0 < len(self.matrix().optimalPath())
 
     def __str__(self):
         '''Return a highlited snippet.
@@ -465,6 +470,13 @@ class Snippet:
 class SnippetTests(unittest.TestCase):
     def setUp(self):    #      0       1    2    3     4    5  6         7
         self.s = Snippet('Little star\'s deep dish pizza sure is fantastic.', 'deep dish pizza')
+
+    def testHasMatchTrue(self):
+        self.assertTrue(self.s.hasMatch())
+
+    def testHasMatchFalse(self):
+        s = Snippet('No match', 'foo')
+        self.assertFalse(s.hasMatch())
 
     def testHighlightSpans(self):
         self.assertEqual(self.s.highlightSpans(), [[2,4]])
