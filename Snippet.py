@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # encoding: ascii
-"""
+
+'''
 Snippet.py
 
 Created by Andrew Hammond on 2010-11-08.
@@ -20,7 +21,7 @@ It varies from the standard approach since instead of matching amino acids, I'm 
 Naturally this means that I'm not using a BLOSUM matrix for weighted partial matches 
 but have instead gone with a simple match / don't match approach.
 
-Details of my algorithm that sucks.
+Details of my algorithm (the one that sucks).
 The document is parsed into a dictionary which maps the various tokens to their locations in the document.
 The query is similarly parsed, however we instead generate an in-order list of terms.
 Then, starting at the 0th index of the document, we pass through the query terms and for each term,
@@ -45,12 +46,9 @@ There are a number of other approaches that might make sense, for example using 
 but I think that those would be things that needed to be A/B tested for user acceptance / preference.
 
 Most Relevant Snippet - The first snippet within the document that contains either all of the query terms in order,
-or the most in order query terms.
+or the most in query terms as close to each other as possible.
+'''
 
-"""
-
-import sys
-import os
 import re
 import unittest
 
@@ -63,18 +61,18 @@ __snippetMaxTail__ = 20
 __tokenNormalizer__ = lambda x : x.lower()
 
 def highlight_doc(doc, query):
-    """
+    '''
     Args:
     doc - String that is a document to be highlighted
     query - String that contains the search query
     Returns:
     The the most relevant snippet with the query terms highlighted.
-    """
+    '''
     pass
 
 
 class Token:
-    """A class to represent tokens and their offset into the string from which they were generated."""
+    '''A class to represent tokens and their offset into the string from which they were generated.'''
     def __init__(self, string, location):
         self.__string__ = string
         self.__location__ = location
@@ -102,11 +100,11 @@ class TokenTests(unittest.TestCase):
 
 
 class Tokenized:
-    """A class to represent parsed, normalized tokens within a document or query.
-    """
+    '''A class to represent parsed, normalized tokens within a document or query.
+    '''
     def __init__(self, document):
-        """Given a string, create a TokenMap object.
-        """
+        '''Given a string, create a TokenMap object.
+        '''
         self.document = document
         # a token is a series of alphanumeric characters or apostrophes not separated by whitespace or other punctuation
         self.__tokenizer__ = re.compile(r'([\w\']+)', re.UNICODE)
@@ -120,10 +118,10 @@ class Tokenized:
         return self.__wordCount__
 
     def map(self):
-        """Accessor function for a token map.
+        '''Accessor function for a token map.
         The token map is a dictionary that maps each normalized token to a list of it's locations in the document.
         For example the map for 'A basic document'
-        """
+        '''
         if '__map__' not in dir(self):
             self.__map__ = {}
             i = 0
@@ -138,9 +136,9 @@ class Tokenized:
         return self.__map__
 
     def list(self):
-        """Accessor function for a token list.
+        '''Accessor function for a token list.
         The token list is a simple list of the tokens.
-        """
+        '''
         if '__list__' not in dir(self):
             self.__list__ = []
             for token in self.__tokenizer__.finditer(self.document):
@@ -163,7 +161,7 @@ class TokenizedTests(unittest.TestCase):
                 {'among': [4], "apostrophe's": [1], "class'": [6], 'issues': [8], 'many': [7], 'usage': [2], 'the': [0, 5], "isn't": [3]}
             )
 
-    def testMapPunctuation(self):	# Note: no apostrophe or underscore
+    def testMapPunctuation(self):    # Note: no apostrophe or underscore
         self.assertEqual(Tokenized('!@#$%^&*()-=+\\|[]{};:"?/.>,<`~ ').map(), {})
 
     def testMapMultipleInstance(self):
@@ -182,7 +180,7 @@ class TokenizedTests(unittest.TestCase):
 
 
 class Greatest:
-    """Given a set of inputs, retain and return the greatest."""
+    '''Given a set of inputs, retain and return the greatest.'''
     def __init__(self, initialValue):
         self.__currentValue__ = initialValue
 
@@ -243,18 +241,16 @@ class SmithWatermanPointTest(unittest.TestCase):
 
 
 class SmithWatermanMatrix:
-    weightMatch  =  2		# a match is worth 2 points
-    weightMiss   = -1		# a mismatch costs 1
-    weightDelete = -1		# a delete (from the document to match the query) costs 1
-    weightInsert = -1		# an insert (into the document to match the query) costs 1
+    weightMatch  =  2        # a match is worth 2 points
+    weightMiss   = -1        # a mismatch costs 1
     dereferenceNode = {
-        'm' : lambda x: (x[0]-1, x[1]-1), 			# match or miss, go diagonally left and up
-        'i' : lambda x: (x[0]-1, x[1]),				# inserted a token, go left
-        'd' : lambda x: (x[0],   x[1]-1)			# deleted a token, go up
-    }
+            'm' : lambda x: (x[0]-1, x[1]-1),           # match or miss, go diagonally left and up
+            'i' : lambda x: (x[0]  , x[1]-1),           # inserted a token, go left
+            'd' : lambda x: (x[0]-1,   x[1])            # deleted a token, go up
+        }
 
     def __init__(self, document, query):
-        """Given a document and a query as Tokenized objects, initialize a matrix of tupels to zero."""
+        '''Given a document and a query as Tokenized objects, initialize a matrix of tupels to zero.'''
         self.document = document.list()
         self.query = query.list()
         self.documentLen = document.wordCount() + 1
@@ -263,22 +259,22 @@ class SmithWatermanMatrix:
         for d in xrange(0, self.documentLen):
             self.__matrix__[d] = [0] * self.queryLen
             for q in xrange(0, self.queryLen):
-                self.__matrix__[d][q] = SmithWatermanPoint(0,'')
-        self.__highestWeight__ = SmithWatermanPoint(0, '')
+                self.__matrix__[d][q] = SmithWatermanPoint(0,' ')
+        self.__highestWeight__ = SmithWatermanPoint(0, ' ')
         self.__highestLocation__ = (0,0)
 
     def __str__(self):
-        """A textual representation of the SW matrix.
+        '''A textual representation of the SW matrix.
         Across the top we have the query, and down the side, we have the document.
         A more traditional representation have the query across the top.
-        """
-        documentOffset = max(map(lambda a: len(a.string()), self.document))	# find the longest term in the document
-        queryOffset = max(map(lambda a: len(a.string()), self.query))	+ 1		# find longest term in the search
+        '''
+        documentOffset = max(map(lambda a: len(a.string()), self.document))    # find the longest term in the document
+        queryOffset = max(map(lambda a: len(a.string()), self.query))    + 1    # find longest term in the search
         # If the largest query term is smaller than the len(r", (1,'m')"), default to that length.
-        # Obviously this won't work very well for weights beyond 9. Fix later?
-        if queryOffset < 9:
-            queryOffset	= 9
-        s = ' ' * documentOffset 										# header string
+        # TODO: Obviously this won't work very well for weights beyond 9 because it assumes a single digit.
+        if queryOffset < 10:
+            queryOffset = 10
+        s = ' ' * documentOffset                                         # header string
         # first query term is the "-" term (no match)
         s += ' ' * (queryOffset - 2) + '-'
         for q in self.query:
@@ -286,7 +282,7 @@ class SmithWatermanMatrix:
         s += "\n"
         for i in xrange(len(self.__matrix__)):
             d = self.document[i-1].string() if i > 0 else '-'
-            s += ' ' * (documentOffset - len(d)) + d + str(self.__matrix__[i]) + "\n"
+            s += ' ' * (documentOffset - len(d)) + d + str(self.__matrix__[i]) + " %d\n" % i
         return s
 
     def dimensions(self):
@@ -301,35 +297,29 @@ class SmithWatermanMatrix:
         return self.__highestLocation__
 
     def __matchWeight__(self, d, q):
-        """A more elegant match weighting algorithm here might be appropriate.
-        I'd try a BLOSUM type approach based on the kind of language involved.
-        For example, you could give a partial match value from pizza to pie.
-        This doesn't of course address the issue of mapping from one term to phrasal terms.
-        Following this pattern __deleteWeight__ and __insertWeight__ would be logical next steps
-        if we wanted to try tuning insert / delete costs.
-        """
-        if self.document[d-1].string() == self.query[q-1].string():
-            #print 'd:%s q:%s' % (self.document[d-1].string(), self.query[q-1].string())
-            return self.weightMatch
-        return self.weightMiss
+        '''Boolean text match.
+        '''
+        # TODO: A more elegant match weighting algorithm here might be appropriate.
+        # Maybe a BLOSUM type approach based on the kind of language involved?
+        # For example, you could give a partial match value from pizza to pie.
+        # This doesn't of course address the issue of mapping from one term to phrasal terms.
+        return self.weightMatch if self.document[d-1].string() == self.query[q-1].string() else self.weightMiss
 
     def heat(self):
-        """An accessor function that generates the SW heat matrix.
+        '''An accessor function that generates the SW heat matrix.
         The matrix is initialized to zero elsewhere.
         Then, going left to right, from top to bottome and starting at the 1th index (not the 0th)
         We take the greatest of 0, the diagonally
-        """
+        '''
         if '__hasBeenHeated__' not in dir(self):
             m = self.__matrix__
-            for d in xrange(1, self.documentLen):					# leave the 0th index elements at 0: guarantee
-                for q in xrange(1, self.queryLen):					# optimalPath search below finds an end point
-                    greatest = Greatest(self.__highestWeight__)		# start at the current highestWeight point.
-                    greatest.append(
-                        SmithWatermanPoint(m[d-1][q-1].weight() + 	# the diagonal point +
-                            self.__matchWeight__(d, q)				# match weight, if any
-                        , 'm'))
-                    greatest.append(SmithWatermanPoint(m[d-1][q].weight() + self.weightDelete, 'd'))
-                    greatest.append(SmithWatermanPoint(m[d][q-1].weight() + self.weightInsert, 'i'))
+            for d in xrange(1, self.documentLen):                   # leave the 0th index elements at 0: guarantee
+                for q in xrange(1, self.queryLen):                  # optimalPath search below finds an end point
+                    match = self.__matchWeight__(d,q)
+                    greatest = Greatest(SmithWatermanPoint(0, ' ')) # Omit this for a global match rather than local
+                    greatest.append(SmithWatermanPoint(m[d - 1][q-1].weight() + match, 'm'))
+                    greatest.append(SmithWatermanPoint(m[d - 1][q].weight() + match, 'd'))
+                    greatest.append(SmithWatermanPoint(m[d][q - 1].weight() + match, 'i'))
                     self.__matrix__[d][q] = greatest.value()
                     if greatest.value() > self.__highestWeight__:
                         self.__highestWeight__ = greatest.value()
@@ -338,13 +328,14 @@ class SmithWatermanMatrix:
 
     def optimalPath(self):
         if '__path__' not in dir(self):
-            self.heat()			# can't path an un-heated matrix.
+            self.heat()            # can't path an un-heated matrix.
             # starting at the highest location, path the matrix first up and left, then down and right.
             self.__path__ = list()
             currentAddress = self.__highestLocation__
             currentPoint = self.__matrix__[currentAddress[0]][currentAddress[1]]
             while currentPoint.weight() > 0:
-                self.__path__.insert(0, currentAddress[0])
+                if currentPoint.source() == 'm':
+                    self.__path__.insert(0, currentAddress[0])
                 currentAddress = self.dereferenceNode[currentPoint.source()](currentAddress)
                 currentPoint = self.__matrix__[currentAddress[0]][currentAddress[1]]
         return self.__path__
@@ -352,27 +343,27 @@ class SmithWatermanMatrix:
 class SmithWatermanMatrixTests(unittest.TestCase):
     def setUp(self):
         self.m = SmithWatermanMatrix(
-            Tokenized('I like my deep dish pizza. Oh yes I do. Pizza!'),	# 11 words
-            Tokenized('Deep dish pizza')									# 3 words
+            Tokenized('I like my deep dish pizza. Oh yes I do. Pizza!'),    # 11 words
+            Tokenized('Deep dish pizza')                                    # 3 words
         )
 
     def testDimensions(self):
         self.assertEqual(self.m.dimensions(), (12, 4))
 
     def testStr(self):
-        self.assertEqual(str(self.m), "            -     deep     dish    pizza]\n" +
-                                      "    -[(0, ''), (0, ''), (0, ''), (0, '')]\n" +
-                                      "    i[(0, ''), (0, ''), (0, ''), (0, '')]\n" +
-                                      " like[(0, ''), (0, ''), (0, ''), (0, '')]\n" +
-                                      "   my[(0, ''), (0, ''), (0, ''), (0, '')]\n" +
-                                      " deep[(0, ''), (0, ''), (0, ''), (0, '')]\n" +
-                                      " dish[(0, ''), (0, ''), (0, ''), (0, '')]\n" +
-                                      "pizza[(0, ''), (0, ''), (0, ''), (0, '')]\n" +
-                                      "   oh[(0, ''), (0, ''), (0, ''), (0, '')]\n" +
-                                      "  yes[(0, ''), (0, ''), (0, ''), (0, '')]\n" +
-                                      "    i[(0, ''), (0, ''), (0, ''), (0, '')]\n" +
-                                      "   do[(0, ''), (0, ''), (0, ''), (0, '')]\n" +
-                                      "pizza[(0, ''), (0, ''), (0, ''), (0, '')]\n"
+        self.assertEqual(str(self.m), "             -      deep      dish     pizza\n" +
+                                      "    -[(0, ' '), (0, ' '), (0, ' '), (0, ' ')] 0\n" +
+                                      "    i[(0, ' '), (0, ' '), (0, ' '), (0, ' ')] 1\n" +
+                                      " like[(0, ' '), (0, ' '), (0, ' '), (0, ' ')] 2\n" +
+                                      "   my[(0, ' '), (0, ' '), (0, ' '), (0, ' ')] 3\n" +
+                                      " deep[(0, ' '), (0, ' '), (0, ' '), (0, ' ')] 4\n" +
+                                      " dish[(0, ' '), (0, ' '), (0, ' '), (0, ' ')] 5\n" +
+                                      "pizza[(0, ' '), (0, ' '), (0, ' '), (0, ' ')] 6\n" +
+                                      "   oh[(0, ' '), (0, ' '), (0, ' '), (0, ' ')] 7\n" +
+                                      "  yes[(0, ' '), (0, ' '), (0, ' '), (0, ' ')] 8\n" +
+                                      "    i[(0, ' '), (0, ' '), (0, ' '), (0, ' ')] 9\n" +
+                                      "   do[(0, ' '), (0, ' '), (0, ' '), (0, ' ')] 10\n" +
+                                      "pizza[(0, ' '), (0, ' '), (0, ' '), (0, ' ')] 11\n"
         )
 
     def testHighestWeightAndLocation(self):
@@ -381,7 +372,6 @@ class SmithWatermanMatrixTests(unittest.TestCase):
 
     def testOptimalPath(self):
         self.assertEqual(self.m.optimalPath(), [4, 5, 6])
-        self.assertEqual(self.m.__matrix__, [])
 
     def testOptimalPathComplex(self):
         m=SmithWatermanMatrix(
@@ -389,89 +379,51 @@ class SmithWatermanMatrixTests(unittest.TestCase):
             Tokenized('deep dish pizza')
         )
         self.assertEqual(m.dimensions(), (25,4))
-#       self.assertEqual(m.optimalPath(), [11, 12, 13])
-        m.highestWeight().weight()	# force heating
-        self.assertEqual(m.__matrix__, [])
+        self.assertEqual(m.optimalPath(), [11, 12, 14])
 
+        
 class Snippet:
-    """A class to support the management and generation of snippets."""
+    '''A class to support the management and generation of snippets.'''
     def __init__(self, document, query):
         self.document = Tokenized(document)
         self.query = Tokenized(query)
 
     def matrix(self):
-        """Accessor function that constructs the SmithWaterman alignment matrix.
+        '''Accessor function that constructs the SmithWaterman alignment matrix.
         For matrix[a][b], the document location is the a'th index and the query location is the b'th.
         Note that the 0th index for the SW matrix is always set to zero,
         so the matrix is effictively indexed from 1 to len() + 1.
-        This leads to some unfortunate uglieness around indexing into the Tokenized arrays vs the matrix.
-        """
+        This leads to some unfortunate uglieness around indexing into the Tokenized arrays vs the SW matrix.
+        '''
         if '__matrix__' not in dir(self):
             self.__matrix__ = SmithWatermanMatrix(self.document, self.query)
         return self.__matrix__
-
-    def heatMap(self):
-        """Accessor function for the heatMap
-        Calculates a heat map for the words in the document.
-        Each word in the document starts at a heat of zero.
-        We then use the recursiveHeatMap function immediately following to "cook" the heatMap.
-        I tested this algorithm and it is broken.
-        It over-weights at the end of the line.
-        I considered a number of potential fixes,
-        the most obvious being to reverse both the document and the query and sum the results,
-        but they were all computationally about as expensive if not more expensive than Smith-Waterman,
-        and the results weren't any better.
-        """
-        if '__heatMap__' not in dir(self):
-            self.document.map()		# force the parse to populate the wordCount field.
-            self.__heatMap__ = [0.0] * self.document.wordCount()
-            self.recursiveHeatMap(0, 0)
-        return self.__heatMap__
-
-    def recursiveHeatMap(self, documentIndex, queryIndex):
-        """recursive utility method for the heatMap method above
-        Given a starting point in a document and a query term,
-        For each case where that term appears in the document,
-            increment it's heat and
-            search for subsequent terms behind it.
-        """
-        queryList = self.query.list()
-        documentMap = self.document.map()
-        while queryIndex < len(queryList):
-            queryTerm = queryList[queryIndex]
-            if documentMap.has_key(queryTerm):
-                for instance in documentMap[queryTerm]:
-                    if documentIndex <= instance:
-                        self.__heatMap__[instance] += 1.0 / (1 + queryIndex)	# balance the value of later query terms
-                        self.recursiveHeatMap(documentIndex+1, queryIndex+1)	# look for later occurences of the phrase
-            queryIndex += 1
-
 
 class SnippetTests(unittest.TestCase):
     def setUp(self):
         self.basicDoc = 'A basic document.'
 
-#	def testHeatMapLength(self):
-#		self.assertEqual(len(Snippet(self.basicDoc, 'basic').heatMap()), 3)
+#    def testHeatMapLength(self):
+#        self.assertEqual(len(Snippet(self.basicDoc, 'basic').heatMap()), 3)
 
-#	def testHeatMapBasic(self):
-#		self.assertEqual(Snippet(self.basicDoc, 'basic').heatMap(), [0,1,0])
+#    def testHeatMapBasic(self):
+#        self.assertEqual(Snippet(self.basicDoc, 'basic').heatMap(), [0,1,0])
 
-#	def testHeatMapMultipleInstance(self):
-#		self.assertEqual(Snippet("The the one two cat three the cat.", "the cat").heatMap(),
-#			[1.0, 1.0, 0.0, 0.0, 2.0, 0.0, 1.0, 2.0]
-#		)
+#    def testHeatMapMultipleInstance(self):
+#        self.assertEqual(Snippet("The the one two cat three the cat.", "the cat").heatMap(),
+#            [1.0, 1.0, 0.0, 0.0, 2.0, 0.0, 1.0, 2.0]
+#        )
 
-#	def testHeatMapNestedPizza(self):
-#		self.assertEqual(Snippet("I like deep deep deep dish pizza pizza pizza!", "deep dish pizza").heatMap(),
-#		    []
-#		)
+#    def testHeatMapNestedPizza(self):
+#        self.assertEqual(Snippet("I like deep deep deep dish pizza pizza pizza!", "deep dish pizza").heatMap(),
+#            []
+#        )
 
-#	def testMatrixInit(self):
-#		m = Snippet('Five word long example doc.', 'Three word query').matrix()
-#		self.assertEqual(len(m), 5 + 1)
-#		self.assertEqual(len(m[0]), 3 + 1)
-#		self.assertEqual(m, [[]])
+#    def testMatrixInit(self):
+#        m = Snippet('Five word long example doc.', 'Three word query').matrix()
+#        self.assertEqual(len(m), 5 + 1)
+#        self.assertEqual(len(m[0]), 3 + 1)
+#        self.assertEqual(m, [[]])
 
 
 if __name__ == '__main__':
