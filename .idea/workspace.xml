@@ -174,8 +174,6 @@
     <property name="options.searchVisible" value="true" />
     <property name="options.splitter.details.proportions" value="0.2" />
   </component>
-  <component name="RunManager" selected="Python's unittest.Tests in Snippet.py">
-    <configuration default="false" name="Doctests in Snippet" type="PythonDocTestRunConfigurationType" factoryName="Python's doctests" temporary="true">
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <envs />
@@ -208,6 +206,7 @@
       <option name="PATTERN" value="" />
       <option name="TEST_TYPE" value="TEST_CLASS" />
       <RunnerSettings RunnerId="Run" />
+      <ConfigurationWrapper RunnerId="PyDebugRunner" />
       <ConfigurationWrapper RunnerId="Run" />
       <method />
     </configuration>
