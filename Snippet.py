@@ -9,17 +9,19 @@ Copyright (c) 2010 Andrew Hammond. All rights reserved.
 
 Find the most relevant snippet for a document and highlight all query terms that appear in the snippet.
 
-Since I do not know what modules are standard at Yelp, I'm sticking to python 2.6 standard stuff,
-and libraries that happen to be included on my Mac (running osx 10.6.4).
+Since I do not know what modules are standard at Yelp,
+I'm sticking to python 2.6,
+and the libraries that happen to be included on my Mac (running osx 10.6.4).
 I would generally use a mocking library such as Mock for UTs,
-but I figured this had better run on anyone's machine.
+and write them so that the classes don't depend on each other,
+but I decided this should instead run on a lowest common denominator box.
 
 Algorithm: 
 I tried my hand at a custom algorithm and wasn't happy with the results,
 so I've impelmented Smith-Waterman.
 http://en.wikipedia.org/wiki/Smith-Waterman_algorithm
 It varies from the standard approach since instead of matching amino acids, I'm matching words.
-Naturally this means that I'm not using a BLOSUM matrix for weighted partial matches 
+Naturally this means that I'm not using a BLOSUM matrix for weighted partial matches,
 but have instead gone with a simple match / don't match approach.
 
 Definitions:
@@ -75,12 +77,15 @@ class Token(object):
         return cmp((self._string, self._start, self._end),
                    (other._string, other._start, other._end))
 
+    @property
     def string(self):
         return self._string
 
+    @property
     def start_index(self):
         return self._start
 
+    @property
     def end_index(self):
         return self._end
 
@@ -90,9 +95,9 @@ class TokenTests(unittest.TestCase):
 
     def test_go_right(self):
         t = Token('a string', 24, 45)
-        self.assertEqual(t.string(), 'a string')
-        self.assertEqual(t.start_index(), 24)
-        self.assertEqual(t.end_index(), 45)
+        self.assertEqual(t.string, 'a string')
+        self.assertEqual(t.start_index, 24)
+        self.assertEqual(t.end_index, 45)
 
 
 class Tokenized(object):
@@ -104,20 +109,24 @@ class Tokenized(object):
         self.document = document
         # a token is a series of alphanumeric characters or apostrophes not separated by whitespace or other punctuation
         self._tokenizer = re.compile(r'([\w\']+)', re.UNICODE)
+        self._list = None
+        self._word_count = None
 
     def __str__(self):
         return self.list.__str__()
 
+    @property
     def word_count(self):
-        if not hasattr(self, '_word_count'):
-            self.list()
+        if self._word_count is None:
+            junk = self.list
         return self._word_count
 
+    @property
     def list(self):
         '''Accessor function for a token list.
         The token list is a simple list of Tokens.
         '''
-        if not hasattr(self, '_list'):
+        if self._list is None:
             self._list = []
             for match in self._tokenizer.finditer(self.document):
                 self._list.append(Token(_token_normalizer(match.expand('\\1')), match.start(1), match.end(1)))
@@ -129,44 +138,45 @@ class TokenizedTests(unittest.TestCase):
         pass
 
     def test_list_go_right(self):
-        self.assertEqual(Tokenized('A basic query').list(),
+        self.assertEqual(Tokenized('A basic query').list,
             [Token('a', 0, 1), Token('basic', 2, 7), Token('query', 8, 13)])
 
     def test_list_multiple_instance(self):
-        self.assertEqual(Tokenized('A, a and another a!').list(),
+        self.assertEqual(Tokenized('A, a and another a!').list,
             [Token('a', 0, 1), Token('a', 3, 4), Token('and', 5, 8), Token('another', 9, 16), Token('a', 17, 18)])
 
     def testWordCount(self):
-        self.assertEqual(Tokenized('This is a six word sentence.').word_count(), 6)
+        self.assertEqual(Tokenized('This is a six word sentence.').word_count, 6)
 
 
 class Greatest(object):
     '''Given a set of inputs, retain and return the greatest.'''
-    def __init__(self, initialValue):
-        self.__currentValue__ = initialValue
+    def __init__(self, initial_value):
+        self._value = initial_value
 
-    def append(self, nextValue):
-        if nextValue > self.__currentValue__:
-            self.__currentValue__ = nextValue
-        return self.__currentValue__
+    def append(self, next_value):
+        if next_value > self._value:
+            self._value = next_value
+        return self._value
 
+    @property
     def value(self):
-        return self.__currentValue__
+        return self._value
 
 class GreatestTests(unittest.TestCase):
     def setUp(self):
         self.g = Greatest(0)
 
     def test_init_go_right(self):
-        self.assertEqual(self.g.value(), 0)
+        self.assertEqual(self.g.value, 0)
 
     def test_append_larger(self):
         self.g.append(5)
-        self.assertEqual(self.g.value(), 5)
+        self.assertEqual(self.g.value, 5)
 
     def test_append_smaller(self):
         self.g.append(-5)
-        self.assertEqual(self.g.value(), 0)
+        self.assertEqual(self.g.value, 0)
 
 
 class SmithWatermanPoint(object):
@@ -212,10 +222,10 @@ class SmithWatermanMatrix(object):
 
     def __init__(self, document, query):
         '''Given a document and a query as Tokenized objects, initialize a matrix of tupels to zero.'''
-        self.document = document.list()
-        self.query = query.list()
-        self.document_length = document.word_count() + 1
-        self.query_length = query.word_count() + 1
+        self.document = document.list
+        self.query = query.list
+        self.document_length = document.word_count + 1
+        self.query_length = query.word_count + 1
         self._matrix = [0] * self.document_length
         for d in xrange(0, self.document_length):
             self._matrix[d] = [0] * self.query_length
@@ -229,8 +239,8 @@ class SmithWatermanMatrix(object):
         Across the top we have the query, and down the side, we have the document.
         A more traditional representation have the query across the top.
         '''
-        document_offset = max(map(lambda a: len(a.string()), self.document))    # find the longest term in the document
-        query_offset = max(map(lambda a: len(a.string()), self.query))    + 1    # find longest term in the search
+        document_offset = max(map(lambda a: len(a.string), self.document))    # find the longest term in the document
+        query_offset = max(map(lambda a: len(a.string), self.query)) + 1    # find longest term in the search
         # If the largest query term is smaller than the len(r", (1,'m')"), default to that length.
         # Obviously this won't work very well for weights beyond 9 because it assumes a single digit.
         # TODO: support arbitrary weights
@@ -240,10 +250,10 @@ class SmithWatermanMatrix(object):
         # first query term is the "-" term (no match)
         s += ' ' * (query_offset - 2) + '-'
         for q in self.query:
-            s += ' ' * (query_offset - len(q.string())) + q.string()
+            s += ' ' * (query_offset - len(q.string)) + q.string
         s += "\n"
         for i in xrange(len(self._matrix)):
-            d = self.document[i-1].string() if i > 0 else '-'
+            d = self.document[i-1].string if i > 0 else '-'
             s += ' ' * (document_offset - len(d)) + d + str(self._matrix[i]) + " %d\n" % i
         return s
 
@@ -267,7 +277,7 @@ class SmithWatermanMatrix(object):
         # Maybe a BLOSUM type approach based on the kind of language involved?
         # For example, you could give a partial match value from pizza to pie.
         # This doesn't of course address the issue of mapping from one term to phrasal terms.
-        return self.WEIGHT_MATCH if self.document[d-1].string() == self.query[q-1].string() else self.WEIGHT_MISS
+        return self.WEIGHT_MATCH if self.document[d-1].string == self.query[q-1].string else self.WEIGHT_MISS
 
     def heat(self):
         '''An accessor function that generates the SW heat matrix.
@@ -284,9 +294,9 @@ class SmithWatermanMatrix(object):
                     greatest.append(SmithWatermanPoint(m[d - 1][q-1].weight() + match, 'm'))
                     greatest.append(SmithWatermanPoint(m[d - 1][q].weight() + match, 'd'))
                     greatest.append(SmithWatermanPoint(m[d][q - 1].weight() + match, 'i'))
-                    self._matrix[d][q] = greatest.value()
-                    if greatest.value() > self._highest_weight:
-                        self._highest_weight = greatest.value()
+                    self._matrix[d][q] = greatest.value
+                    if greatest.value > self._highest_weight:
+                        self._highest_weight = greatest.value
                         self._highest_location = (d,q)
             self._heated = 1
 
@@ -389,14 +399,14 @@ class Snippet:
         return self._highlights
 
     def start_index(self, termNumber):
-        '''Given a term in the document.list(), return it's start index
+        '''Given a term in the document.list, return it's start index
         '''
-        return self.document.list()[termNumber].start_index()
+        return self.document.list[termNumber].start_index
 
     def end_index(self, termNumber):
-        '''Geven a term in the document.list(), return it's end index
+        '''Geven a term in the document.list, return it's end index
         '''
-        return self.document.list()[termNumber].end_index()
+        return self.document.list[termNumber].end_index
 
     def has_match(self):
         return 0 < len(self.matrix().optimalPath())
