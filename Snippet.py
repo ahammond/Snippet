@@ -23,6 +23,7 @@ http://en.wikipedia.org/wiki/Smith-Waterman_algorithm
 It varies from the standard approach since instead of matching amino acids, I'm matching words.
 Naturally this means that I'm not using a BLOSUM matrix for weighted partial matches,
 but have instead gone with a simple match / don't match approach.
+An obvious next step would involve some sort of weighted partial matches on synonyms, etc.
 
 Definitions:
 Document - The input to be searched.
@@ -39,7 +40,7 @@ from collections import deque
 
 # Initially, we won't worry much about normalizing the input. 
 # TODO: Normalize tokens more intelligently
-# like for example mapping "greasewheel" to pizza, or brewskie to beer.
+# like for example mapping plurals to singular
 _token_normalizer = lambda x : x.lower()
 
 def highlight_doc(doc, query):
@@ -233,11 +234,13 @@ class SmithWatermanMatrix(object):
                 self._matrix[d][q] = SmithWatermanPoint(0,' ')
         self._highest_weight = SmithWatermanPoint(0, ' ')
         self._highest_location = (0,0)
+        self._heated = None
+        self._path = None
 
     def __str__(self):
         '''A textual representation of the SW matrix.
         Across the top we have the query, and down the side, we have the document.
-        A more traditional representation have the query across the top.
+        A more traditional representation has the query across the top, but terminals are narrow.
         '''
         document_offset = max(map(lambda a: len(a.string), self.document))    # find the longest term in the document
         query_offset = max(map(lambda a: len(a.string), self.query)) + 1    # find longest term in the search
@@ -285,7 +288,7 @@ class SmithWatermanMatrix(object):
         Then, going left to right, from top to bottome and starting at the 1th index (not the 0th)
         We take the greatest of 0, the diagonally
         '''
-        if not hasattr(self, '_heated'):
+        if self._heated is None:
             m = self._matrix
             for d in xrange(1, self.document_length):                   # leave the 0th index elements at 0: guarantee
                 for q in xrange(1, self.query_length):                  # optimalPath search below finds an end point
@@ -301,7 +304,7 @@ class SmithWatermanMatrix(object):
             self._heated = 1
 
     def optimalPath(self):
-        if not hasattr(self, '_path'):
+        if self._path is None:
             self.heat()            # can't path an un-heated matrix.
             # starting at the highest location, path the matrix first up and left, then down and right.
             self._path = list()
@@ -367,6 +370,8 @@ class Snippet:
     def __init__(self, document, query):
         self.document = Tokenized(document)
         self.query = Tokenized(query)
+        self._matrix = None
+        self._highlights = None
 
     def matrix(self):
         '''Accessor function that constructs the SmithWaterman alignment matrix.
@@ -375,14 +380,14 @@ class Snippet:
         so the matrix is effictively indexed from 1 to len() + 1.
         This leads to some unfortunate uglieness around indexing into the Tokenized arrays vs the SW matrix.
         '''
-        if '_matrix' not in dir(self):
+        if self._matrix is None:
             self._matrix = SmithWatermanMatrix(self.document, self.query)
         return self._matrix
 
     def highlight_spans(self):
         '''Accessor function that constructs a list of tuples that represent the beginning and end of highlight sections.
         '''
-        if not hasattr(self, '_highlights'):
+        if self._highlights is None:
             self._highlights = []
             terms = deque(self.matrix().optimalPath())
             try:
@@ -433,7 +438,7 @@ class Snippet:
             end = self.end_index(endTerm)
             r += d[cursor:start] + self.HIGHLIGHT_START + d[start:end] + self.HIGHLIGHT_END
             cursor = end
-        # TODO: like the head, should the tail break on word boundaries instead
+        # TODO: like the head, should the tail break on word boundaries instead?
         tailLength = cursor+self.SNIPPET_MAX_TAIL
         if tailLength > len(d):
             r+=d[cursor:]
